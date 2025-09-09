@@ -2,27 +2,14 @@
 local mtQueue = {}
       -- Metatable method indexing
       mtQueue.__index = mtQueue
-      -- Where to go after pulling
-      mtQueue.__out = {
-        ID = 0, -- Track the exit node
-        Vector(3124.45,1278.14,16.2813),
-        Vector(2787.98,1332.3,16.2813),
-        Vector(2768.52,1426.19,16.2813),
-        Vector(2701.32,1426.65,16.2813),
-        Vector(2635.5,1241.34,16.2813)
-      }
       -- Color for out trajectory debug
       mtQueue.__cout = Color(255,255,0,255)
-      -- Table of all the NPC
-      mtQueue.__npc = {}
       -- Contains the NPC which exits
       mtQueue.__npx = nil
       -- Contains the NPC pulled from sequential
       mtQueue.__nps = nil
       -- Cash register NPC
       mtQueue.__npr = nil
-      -- Cash register NPC position
-      mtQueue.__crps = Vector(3361.84,1204.29,16.2813)
       -- Color for cash register
       mtQueue.__cocr = Color(255,0,255,255)
       -- Enable to act as a hive mind
@@ -33,7 +20,7 @@ local mtQueue = {}
       mtQueue.__pull = 4 -- in seconds
       -- NPC Arrival Interval
       mtQueue.__push = 1 -- in seconds
-      -- Check when shedule is finished
+      -- Check when schedule is finished
       mtQueue.__shed = 0.1 -- in seconds
       -- Remove after the final destination
       mtQueue.__dstr = 1 -- in seconds
@@ -43,7 +30,7 @@ local mtQueue = {}
       mtQueue.__rrnp = 40
       -- Remove radius margin
       mtQueue.__rrmr = 0.85
-      -- Color for debgging remove radius
+      -- Color for debugging remove radius
       mtQueue.__conp = Color(0,255,255,255)
       -- Turn on/off the draw method
       mtQueue.__draw = true
@@ -51,7 +38,7 @@ local mtQueue = {}
       mtQueue.__drrm = false
       -- Color to pass for drawing
       mtQueue.__colr = Color(0,0,0,255)
-      -- Color transperent alpha
+      -- Color transparent alpha
       mtQueue.__cota = 25
       -- Function filter for NPC trace
       mtQueue.__trft = {
@@ -66,6 +53,8 @@ local mtQueue = {}
       end
 local function NewQueue(pos)
   local mvPos, miSiz = Vector(pos), 1
+  local mtExit = {Size = 0, ID = 0}
+  local mtNPC  = {Key = {}, Data = {} Size = 0}
   local mtData = {Size = 0}
         mtData[1] = {Pos = Vector(mvPos), Ent = nil}
   local self = {}; setmetatable(self, mtQueue)
@@ -84,6 +73,50 @@ local function NewQueue(pos)
       mtData[miSiz + idx] = {Pos = Vector(), Ent = nil}
       mtData[miSiz + idx].Pos:Set(vPos + muo * vDir)
     end; miSiz = miSiz + iSiz; return self
+  end
+  -- Setup NPC references
+  -- Table of all the NPC
+  -- mtQueue.__npc = {}
+  function self:SetNPC(ent)
+    if(ent and ent:IsValid()) then
+      if(mtNPC.Key[ent]) then return self end
+      mtNPC.Size = mtNPC.Size + 1
+      mtNPC.Data[mtNPC.Size] = ent
+      mtNPC.Key[ent] = mtNPC.Size
+    end; return self
+  end
+  function self:GetNPC(ent)
+    if(ent and ent:IsValid()) then
+      if(mtNPC.Key[ent]) then return self end
+      mtNPC.Size = mtNPC.Size + 1
+      mtNPC.Data[mtNPC.Size] = ent
+    end; return self
+  end
+  -- Add a node to the exit path
+  function self:SetExit(pos, idx)
+    if(idx) then -- Copy node data
+      if(not pos) then return self end
+      if(idx == "#") then
+        mtExit.VPos = Vector(pos:Unpack()); return self end
+      if(idx < 1 or idx > mtExit.Size) then return self end
+      mtExit[idx]:Set(pos)
+    else  -- Acts like a pull
+      if(not pos) then return self end
+      mtExit.Size = mtExit.Size + 1
+      mtExit[mtExit.Size] = Vector(pos:Unpack())
+    end; return self
+  end
+  function self:GetExit(idx)
+    if(idx) then local exv = Vector() -- Copy node data
+      if(idx == "#") then return mtExit.VPos  end
+      if(idx < 1 or idx > mtExit.Size) then return exv end
+      exv:Set(mtExit[idx]); return exv
+    else  -- Acts like a pull
+      local exv = mtExit[mtExit.Size]
+      mtExit[mtExit.Size] = nil
+      mtExit.Size = mtExit.Size - 1
+      return exv
+    end
   end
   -- Update count of valid slots
   function self:Count()
@@ -108,7 +141,7 @@ local function NewQueue(pos)
     local pos = LocalPlayer():GetPos()
     return (mar * 200) / org:Distance(pos)
   end
-  -- Returns the border lcation for nodes
+  -- Returns the border location for nodes
   function self:GetPathMargin(vS, vE)
     if(not vS) then return 0 end
     if(not vE) then return 0 end
@@ -261,7 +294,6 @@ local function NewQueue(pos)
   function self:Refresh()
     if(CLIENT) then return self end
     local rad = mtQueue.__rrnp
-    local out = mtQueue.__out
     local rmr = mtQueue.__rrmr
     local vup = Vector(0,0,rad/2)
     local cps = mtQueue.__crps
@@ -290,13 +322,13 @@ local function NewQueue(pos)
         if(ent[cnt] ~= tr.Entity) then SafeRemoveEntity(ent[cnt]) end
       end
     end
-    for idx = 1, #out do
-      local mur, prv, crr = self:GetPathMargin(out[idx-1] or self:GetNode(1), out[idx])
+    for idx = 1, #mtExit do
+      local mur, prv, crr = self:GetPathMargin(mtExit[idx-1] or self:GetNode(1), mtExit[idx])
       if(mur > 0) then
         local ent = ents.FindAlongRay(prv, crr)
         for cnt = 1, #ent do SafeRemoveEntity(ent[cnt]) end
       end
-      local ent = ents.FindInSphere(out[idx], rad)
+      local ent = ents.FindInSphere(mtExit[idx], rad)
       for cnt = 1, #ent do SafeRemoveEntity(ent[cnt]) end
     end; return self
   end
@@ -320,7 +352,7 @@ local function NewQueue(pos)
       cv.Ent = nil    -- Remove the NPC from the slot
     end; return self
   end
-  -- Rearange NPC in the queue
+  -- Rearrange NPC in the queue
   function self:Arrange()
     for crr = 1, miSiz do
       local cv = mtData[crr]
@@ -338,7 +370,7 @@ local function NewQueue(pos)
             else -- Save index of first valid
               sv.Ent = nil
             end
-          end -- When npc is found assign it to the empty slot
+          end -- When NPC is found assign it to the empty slot
           if(idx ~= 0 and not IsValid(cv.Ent)) then
             local iv = mtData[idx]
             cv.Ent = iv.Ent -- Move NPC to current pointer
@@ -367,7 +399,7 @@ local function NewQueue(pos)
       end
     end; return self
   end
-  --Draw debig information
+  --Draw debug information
   function self:Draw2D()
     local cps = mtQueue.__crps
     local cpc = mtQueue.__cocr
@@ -392,29 +424,27 @@ local function NewQueue(pos)
     end
     local cot = mtQueue.__cout
     cot.r, cot.g, cot.b = 255, 255, 0
-    local poo = mtQueue.__out
-    local xyo, npo = poo[1]:ToScreen(), #poo
+    local xyo, npo = mtExit[1]:ToScreen(), #mtExit
     surface.SetDrawColor(cot)
     surface.DrawLine(xy.x, xy.y, xyo.x, xyo.y)
-    surface.DrawCircle(xyo.x, xyo.y, self:GetRadius(poo[1], 20), cot)
+    surface.DrawCircle(xyo.x, xyo.y, self:GetRadius(mtExit[1], 20), cot)
     for out = 2, npo do
-      local xyo = poo[out]:ToScreen()
-      local xyn = poo[out-1]:ToScreen()
+      local xyo = mtExit[out]:ToScreen()
+      local xyn = mtExit[out-1]:ToScreen()
       surface.SetDrawColor(cot)
       surface.DrawLine(xyn.x, xyn.y, xyo.x, xyo.y)
       if(out == npo) then
         cot.r, cot.g, cot.b = 0, 0, 255
-        surface.DrawCircle(xyo.x, xyo.y, self:GetRadius(poo[out], 20), cot)
+        surface.DrawCircle(xyo.x, xyo.y, self:GetRadius(mtExit[out], 20), cot)
       else
         cot.r, cot.g, cot.b = 255, 255, 0
-        surface.DrawCircle(xyo.x, xyo.y, self:GetRadius(poo[out], 20), cot)
+        surface.DrawCircle(xyo.x, xyo.y, self:GetRadius(mtExit[out], 20), cot)
       end
     end
     return self
   end
-  -- Render debig information in 3D space
+  -- Render debug information in 3D space
   function self:Draw3D()
-    local out = mtQueue.__out
     local cor = mtQueue.__conp
     local rad = mtQueue.__rrnp
     local cps = mtQueue.__crps
@@ -438,22 +468,23 @@ local function NewQueue(pos)
       render.DrawSphere(oQ:GetNode(idx), rad, 16, 16, cot)
       cot.a = coa
     end
-    for idx = 1, #out do
-      local mur, prv, crr = oQ:GetPathMargin(out[idx-1] or oQ:GetNode(1), out[idx])
+    for idx = 1, #mtExit do
+      local mur, prv, crr = oQ:GetPathMargin(mtExit[idx-1] or oQ:GetNode(1), mtExit[idx])
       if(mur > 0) then
         local coa = cor.a; cor.a = 255
         render.DrawLine(prv, crr, cor)
         cor.a = coa
       end
       local coa = cor.a; cor.a = mtQueue.__cota
-      render.DrawSphere(out[idx], rad, 16, 16, cor)
+      render.DrawSphere(mtExit[idx], rad, 16, 16, cor)
       cor.a = coa
     end; return self
   end
   return self
 end
 
---[[ E2 code gor generating vector locations
+--[[
+  E2 code for generating vector locations
   print(entity():pos())
   selfDestruct()
 ]]
@@ -482,6 +513,13 @@ oQ:Extend(Vector(-1,0,0), 60, 1)
 oQ:Extend(Vector(0,-1,0), 60, 2)
 oQ:Extend(Vector(-1,0,0), 60, 1)
 oQ:Extend(Vector(0,1,0), 60, 2)
+oQ:SetExit(Vector(3124.45,1278.14,16.2813))
+oQ:SetExit(Vector(2787.98,1332.3,16.2813))
+oQ:SetExit(Vector(2768.52,1426.19,16.2813))
+oQ:SetExit(Vector(2701.32,1426.65,16.2813))
+oQ:SetExit(Vector(2635.5,1241.34,16.2813))
+oQ:SetExit(Vector(3361.84,1204.29,16.2813), "#")
+
 oQ:Refresh()
 oQ:Clear()
 
@@ -544,6 +582,7 @@ local function queueConfigTimers()
   timer.Remove("hook_npc_queue_pull")
   timer.Create("hook_npc_queue_pull", mtQueue.__pull, 0,
     function()
+      local out = oQ:GetExit("#")
       local cre = mtQueue.__npr
       if(not IsValid(cre)) then return end
       local crp = mtQueue.__crps
@@ -555,21 +594,20 @@ local function queueConfigTimers()
       if(IsValid(ent) and oQ:IsMove(ent)) then return end
       mtQueue.__npx = oQ:Pull()
       if(IsValid(mtQueue.__npx)) then
-        local out = mtQueue.__out
         out.ID = out.ID + 1
         oQ:Move(mtQueue.__npx, out[out.ID])
         oQ:Arrange():Relocate()
       end
     end)
 
-  -- Controls when NPC follws out trajectory
+  -- Controls when NPC follows out trajectory
   timer.Remove("hook_npc_queue_ched")
   timer.Create("hook_npc_queue_ched", mtQueue.__shed, 0,
     function()
+      local out = oQ:GetExit("#")
       if(not IsValid(mtQueue.__npx)) then
-        mtQueue.__out.ID = 0; return
+        out.ID = 0; return
       end
-      local out = mtQueue.__out
       if(oQ:IsMove(mtQueue.__npx, out[out.ID])) then return end
       out.ID = out.ID + 1
       if(out[out.ID]) then
@@ -579,7 +617,7 @@ local function queueConfigTimers()
           function()
             SafeRemoveEntity(mtQueue.__npx)
             mtQueue.__npx = nil
-            mtQueue.__out.ID = 0
+            out.ID = 0
           end)
       end
     end)
