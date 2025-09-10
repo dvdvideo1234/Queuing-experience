@@ -77,19 +77,28 @@ local function NewQueue(pos)
   -- Setup NPC references
   -- Table of all the NPC
   -- mtQueue.__npc = {}
-  function self:SetNPC(ent)
-    if(ent and ent:IsValid()) then
-      if(mtNPC.Key[ent]) then return self end
+  function self:SetNPC(new)
+    local npc = new; if(tonumber(npc)) then
+      npc = Entity(tonumber(npc)) end
+    if(IsValid(npc)) then
+      if(mtNPC.Key[npc]) then return self end
       mtNPC.Size = mtNPC.Size + 1
-      mtNPC.Data[mtNPC.Size] = ent
-      mtNPC.Key[ent] = mtNPC.Size
+      mtNPC.Data[mtNPC.Size] = npc
+      mtNPC.Key[npc] = mtNPC.Size
     end; return self
   end
-  function self:GetNPC(ent)
-    if(ent and ent:IsValid()) then
-      if(mtNPC.Key[ent]) then return self end
-      mtNPC.Size = mtNPC.Size + 1
-      mtNPC.Data[mtNPC.Size] = ent
+  function self:GetNPC(key)
+    if(not key) then return nil end
+    if(key == "#") then return mtNPC end
+    local idx = mtNPC.Key[key]
+    local npc = mtNPC.Data[key]
+    if(idx and not npc and IsValid(key)) then
+      npc = table.remove(mtNPC.Data, idx)
+      mtNPC.Key[key] = nil; mtNPC.Size = mtNPC.Size - 1
+    elseif(npc and not idx and IsValid(npc)) then
+      idx = mtNPC.Key[npc]
+      npc = table.remove(mtNPC.Data, idx)
+      mtNPC.Key[npc] = nil; mtNPC.Size = mtNPC.Size - 1
     end; return self
   end
   -- Add a node to the exit path
@@ -553,7 +562,7 @@ local function queueConfigTimers()
               mtQueue.__nps = nil
             end
           else
-            local npc = table.remove(mtQueue.__npc, 1)
+            local npc = oQ:GetNPC(1)
             if(IsValid(npc)) then
               if(oQ:Push(npc)) then
                 oQ:Arrange():Relocate()
@@ -567,7 +576,7 @@ local function queueConfigTimers()
           oQ:Move(cre, crp)
         end
       else
-        local npc = table.remove(mtQueue.__npc, 1)
+        local npc = oQ:GetNPC(1)
         if(IsValid(npc)) then
           mtQueue.__npr = npc
           oQ:Move(npc, crp)
@@ -699,19 +708,19 @@ if(CLIENT) then
       net.SendToServer()
     end)
 else
-  -- Message reciever function
+  -- Message receiver function
   net.Receive("hook_npc_queue_msg",
     function()
       local ply, txt = net.ReadEntity(), net.ReadString()
       queueConfigNPC(ply, txt)
     end)
 
-  -- Do the locic with timers
+  -- Do the logic with timers
   hook.Remove("PlayerSpawnedNPC", "hook_npc_queue")
   hook.Add("PlayerSpawnedNPC", "hook_npc_queue",
     function(ply, npc)
       if(not IsValid(npc)) then return end
-      table.insert(mtQueue.__npc, npc)
+      oQ:SetNPC(npc)
     end)
   -- Setup timers and routines on the server
   queueConfigTimers()
