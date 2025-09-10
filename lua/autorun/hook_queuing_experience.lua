@@ -75,16 +75,27 @@ local function NewQueue(pos)
     end; miSiz = miSiz + iSiz; return self
   end
   -- Setup NPC references
-  -- Table of all the NPC
-  -- mtQueue.__npc = {}
-  function self:SetNPC(new)
+  function self:SetNPC(new, key)
     local npc = new; if(tonumber(npc)) then
       npc = Entity(tonumber(npc)) end
     if(IsValid(npc)) then
       if(mtNPC.Key[npc]) then return self end
-      mtNPC.Size = mtNPC.Size + 1
-      mtNPC.Data[mtNPC.Size] = npc
-      mtNPC.Key[npc] = mtNPC.Size
+      if(key) then
+        local cidx = mtNPC.Key[key]
+        local cnpc = mtNPC.Data[key]
+        if(cidx and not cnpc) then -- Key is entity
+          cnpc = mtNPC.Data[cidx]
+        elseif(cnpc and not cidx) then -- Key is number
+          cidx = mtNPC.Key[cnpc]
+        end
+        mtNPC.Key[cnpc]  = nil
+        mtNPC.Key[npc]   = cidx
+        mtNPC.Data[cidx] = npc
+      else
+        mtNPC.Size = mtNPC.Size + 1
+        mtNPC.Data[mtNPC.Size] = npc
+        mtNPC.Key[npc] = mtNPC.Size
+      end
     end; return self
   end
   function self:GetNPC(key)
@@ -92,14 +103,14 @@ local function NewQueue(pos)
     if(key == "#") then return mtNPC end
     local idx = mtNPC.Key[key]
     local npc = mtNPC.Data[key]
-    if(idx and not npc and IsValid(key)) then
-      npc = table.remove(mtNPC.Data, idx)
-      mtNPC.Key[key] = nil; mtNPC.Size = mtNPC.Size - 1
-    elseif(npc and not idx and IsValid(npc)) then
+    if(idx and not npc) then -- Key is entity
+      npc = mtNPC.Data[idx]
+    elseif(npc and not idx) then -- Key is number
       idx = mtNPC.Key[npc]
-      npc = table.remove(mtNPC.Data, idx)
-      mtNPC.Key[npc] = nil; mtNPC.Size = mtNPC.Size - 1
-    end; return self
+    end
+    npc = table.remove(mtNPC.Data, idx)
+    mtNPC.Key[npc] = nil; mtNPC.Size = mtNPC.Size - 1
+    return npc
   end
   -- Add a node to the exit path
   function self:SetExit(pos, idx)
